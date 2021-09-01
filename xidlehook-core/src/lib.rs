@@ -36,7 +36,7 @@ use std::{
     cmp,
     convert::TryInto,
     fmt, ptr,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use log::{info, trace, warn};
@@ -527,7 +527,7 @@ where
                 Action::Sleep(delay) => {
                     trace!("Sleeping for {:?}", delay);
 
-                    let sleep_start = Instant::now();
+                    let sleep_start = SystemTime::now();
 
                     #[cfg(feature = "async-std")]
                     async_std::task::sleep(delay).await;
@@ -536,13 +536,20 @@ where
                         tokio::time::sleep(delay).await;
                     }
 
-                    if let Some(time_difference) = sleep_start.elapsed().checked_sub(delay) {
-                        if time_difference >= Duration::from_secs(3) && self.detect_sleep {
-                            info!(
-                                "We slept {:?} longer than expected - has the computer been suspended?",
-                                time_difference,
-                            );
-                            self.reset(xcb.get_idle()?)?;
+                    match sleep_start.elapsed() {
+                        Ok(duration) => {
+                            if let Some(time_difference) = duration.checked_sub(delay) {
+                                if time_difference >= Duration::from_secs(3) && self.detect_sleep {
+                                    info!(
+                                        "We slept {:?} longer than expected - has the computer been suspended?",
+                                        time_difference,
+                                    );
+                                    self.reset(xcb.get_idle()?)?;
+                                }
+                            }
+                        },
+                        Err(_) => {
+                            panic!("TODO: handle this");
                         }
                     }
                 },
